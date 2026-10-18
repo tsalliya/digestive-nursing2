@@ -1,0 +1,11 @@
+'use strict';
+let summaries=[],attempts=[];
+const $=id=>document.getElementById(id),time=s=>new Date(s).toLocaleString('zh-TW'),score=a=>a?a.score+' / '+a.max:'尚未測驗';
+function draw(){const term=$('filter').value.trim().toLowerCase(),rows=summaries.filter(s=>(s.number+' '+s.name).toLowerCase().includes(term));$('students').replaceChildren();$('attempts').replaceChildren();const row=(target,values)=>{const tr=document.createElement('tr');for(const v of values){const td=document.createElement('td');td.textContent=v;tr.append(td)}$(target).append(tr)};for(const s of rows)row('students',[s.number,s.name,s.visits,s.minutes,s.count,s.latest,s.best,s.when]);for(const a of attempts.filter(a=>rows.some(s=>s.number===a.number)))row('attempts',[a.number,a.name,time(a.submitted),score(a),(100*a.score/a.max).toFixed(0)+'%']);$('status').textContent=rows.length?'顯示 '+rows.length+' 位測試學生。':'沒有符合的紀錄。請先回到教材，填寫測試身分並開始記錄。'}
+async function refresh(){try{const [students,sessions,records]=await Promise.all(['students','sessions','attempts'].map(LocalLearning.all));attempts=records.map(a=>({...a,name:students.find(s=>s.number===a.number)?.name||''})).sort((a,b)=>b.submitted.localeCompare(a.submitted));summaries=students.map(s=>{const readings=sessions.filter(r=>r.number===s.number),tests=attempts.filter(a=>a.number===s.number),best=tests.reduce((b,a)=>!b||a.score/a.max>b.score/b.max?a:b,null);return {...s,visits:readings.length,minutes:(readings.reduce((n,r)=>n+r.seconds,0)/60).toFixed(1),count:tests.length,latest:score(tests[0]),best:score(best),when:tests[0]?time(tests[0].submitted):'—'}});draw()}catch(e){$('status').textContent='無法讀取瀏覽器資料庫：'+e.message}}
+$('refresh').onclick=refresh;$('filter').oninput=draw;
+$('export').onclick=()=>LocalLearning.download([['學號','姓名','閱讀次數','閱讀分鐘','測驗次數','最近成績','最高成績','最近測驗時間'],...summaries.map(s=>[s.number,s.name,s.visits,s.minutes,s.count,s.latest,s.best,s.when])],'學習摘要.csv');
+$('export-attempts').onclick=()=>LocalLearning.download([['學號','姓名','提交時間','得分','滿分','答對率'],...attempts.map(a=>[a.number,a.name,a.submitted,a.score,a.max,(100*a.score/a.max).toFixed(0)+'%'])],'測驗明細.csv');
+$('erase').onclick=async()=>{if(!confirm('確定清除所有測試學生、閱讀紀錄與成績？此操作無法復原。'))return;try{await LocalLearning.clear();await refresh()}catch(e){$('status').textContent='清除失敗：'+e.message}};
+refresh();
+
